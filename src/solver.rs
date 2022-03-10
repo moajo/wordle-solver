@@ -47,7 +47,9 @@ impl Solver {
             } else if c == 'y' {
                 self.candidate = calc_yellow_words(attempt_char, i, &self.candidate);
             } else if c == '.' {
-                self.candidate = calc_gray_words(attempt_char, &self.candidate);
+                if !check_exceptive_gray(&attempt_word, &feedback, i) {
+                    self.candidate = calc_gray_words(attempt_char, &self.candidate);
+                }
             } else {
                 panic!("Invalid feedback {}", c);
             }
@@ -116,4 +118,25 @@ fn calc_words_works_correctly() {
     let y = calc_yellow_words('a', 1, &candidate);
     let gray = calc_gray_words('a', &candidate);
     assert_eq!(candidate.len(), g.len() + y.len() + gray.len());
+}
+
+// 例えば文字aが1文字目でgreenのとき、
+// 3文字目にもaを指定してattemptした場合、例外的に3文字目はyではなく.になる。
+// (yにはならない)
+// そのような例外的状況であるかどうかを判定する
+fn check_exceptive_gray(attempt_word: &String, feedback: &String, current_i: usize) -> bool {
+    let current_char = attempt_word.chars().nth(current_i).unwrap();
+    for (i, c) in feedback.chars().enumerate() {
+        if current_i == i {
+            continue;
+        }
+        if feedback.chars().nth(i).unwrap() != 'g' {
+            continue;
+        }
+        let attempt_char = attempt_word.chars().nth(i).unwrap();
+        if attempt_char == current_char {
+            return true;
+        }
+    }
+    return false;
 }
