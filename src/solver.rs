@@ -1,5 +1,7 @@
 use crate::utils;
 use log::{debug, error, info, log_enabled, Level};
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub struct Solver {
     candidate: Vec<String>,
@@ -19,21 +21,30 @@ impl Solver {
             return self.candidate[0].clone();
         }
         let alphabet = "abcdefghijklmnopqrstuvwxyz";
-        let expected_reductions: Vec<_> = alphabet
+        let expected_reductions: HashMap<_, _> = alphabet
             .chars()
-            .map(|c| calc_expected_reduction(c, 1, &self.candidate))
+            .map(|c| (c, calc_expected_reduction(c, 1, &self.candidate)))
             .collect();
-        let max_expected_reduction_index = crate::utils::max_index(&expected_reductions);
-        let max_expected_reduction = alphabet.chars().nth(max_expected_reduction_index).unwrap();
+        let (max_expected_reduction_char, max_expected_reduction) = crate::utils::max(
+            &expected_reductions.iter().collect(),
+            |a: &(&char, &f64)| *a.1,
+        );
         info!("期待削減量: {:?}", expected_reductions);
-        info!("最大削減文字: {:?}", max_expected_reduction);
+        info!("最大削減文字: {:?}", max_expected_reduction_char);
 
-        let aa: Vec<_> = self
-            .candidate
+        let word_scores: HashMap<_, _> = self
+            .whole
             .iter()
-            .filter(|s| s.contains(max_expected_reduction))
+            .map(|word| (word.clone(), calc_word_score(word, &expected_reductions)))
             .collect();
-        return aa[0].to_string();
+
+        let (max_expected_reduction_word, max_expected_reduction_of_word) =
+            crate::utils::max(&word_scores.iter().collect(), |a: &(&String, &f64)| *a.1);
+
+        info!("単語期待削減量: {:?}", max_expected_reduction_of_word);
+        info!("最大削減単語: {:?}", max_expected_reduction_word);
+
+        return max_expected_reduction_word.clone();
     }
     pub fn feedback(&mut self, attempt_word: String, feedback: String) {
         let n_before = self.candidate.len();
@@ -47,9 +58,19 @@ impl Solver {
             } else if c == 'y' {
                 self.candidate = calc_yellow_words(attempt_char, i, &self.candidate);
             } else if c == '.' {
-                if !check_exceptive_gray(&attempt_word, &feedback, i) {
-                    self.candidate = calc_gray_words(attempt_char, &self.candidate);
+                if check_exceptive_gray(&attempt_word, &feedback, i) {
+                    continue;
                 }
+                // 複数文字があると速い方しか黄色くならない。
+                // つまりgrayだけどそれより前に同じ文字が出てる場合は無視する必要がある
+                let index = attempt_word
+                    .chars()
+                    .position(|cc| cc == attempt_char)
+                    .unwrap();
+                if index != i {
+                    continue;
+                }
+                self.candidate = calc_gray_words(attempt_char, &self.candidate);
             } else {
                 panic!("Invalid feedback {}", c);
             }
@@ -139,4 +160,22 @@ fn check_exceptive_gray(attempt_word: &String, feedback: &String, current_i: usi
         }
     }
     return false;
+}
+
+type CharScores = HashMap<char, f64>;
+
+// 単語の削減量をヒューリスティックに計算
+// 「文字スコアの合計、ただし同じ文字は一回しか計上しない」
+fn calc_word_score(word: &String, char_scores: &CharScores) -> f64 {
+    let mut used_chars: HashSet<char> = HashSet::new();
+    let mut score = 0.0;
+    for c in word.chars() {
+        if used_chars.contains(&c) {
+            continue;
+        }
+        used_chars.insert(c);
+        let char_score = char_scores.get(&c).unwrap();
+        score += char_score;
+    }
+    return score;
 }
