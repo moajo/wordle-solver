@@ -3,6 +3,8 @@ use log::{debug, error, info, log_enabled, Level};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+type CharScores = HashMap<char, f64>;
+
 pub struct Solver {
     candidate: Vec<String>,
     whole: Vec<String>,
@@ -20,30 +22,27 @@ impl Solver {
         if self.candidate.len() == 1 {
             return self.candidate[0].clone();
         }
+
+        // 文字単位で候補を減らせる量の期待値(嘘)を計算
         let alphabet = "abcdefghijklmnopqrstuvwxyz";
-        let expected_reductions: HashMap<_, _> = alphabet
+        let expected_reductions: CharScores = alphabet
             .chars()
             .map(|c| (c, calc_expected_reduction(c, 1, &self.candidate)))
             .collect();
-        let (max_expected_reduction_char, max_expected_reduction) = crate::utils::max(
-            &expected_reductions.iter().collect(),
-            |a: &(&char, &f64)| *a.1,
-        );
-        info!("期待削減量: {:?}", expected_reductions);
-        info!("最大削減文字: {:?}", max_expected_reduction_char);
+        info!("文字期待削減量: {:?}", expected_reductions);
 
+        // 単語単位での候補を減らせる量の期待値(嘘)を計算
         let word_scores: HashMap<_, _> = self
             .whole
             .iter()
             .map(|word| (word.clone(), calc_word_score(word, &expected_reductions)))
             .collect();
 
+        // 一番減らせるやつ(嘘)を返す
         let (max_expected_reduction_word, max_expected_reduction_of_word) =
             crate::utils::max(&word_scores.iter().collect(), |a: &(&String, &f64)| *a.1);
-
         info!("単語期待削減量: {:?}", max_expected_reduction_of_word);
         info!("最大削減単語: {:?}", max_expected_reduction_word);
-
         return max_expected_reduction_word.clone();
     }
     pub fn feedback(&mut self, attempt_word: String, feedback: String) {
@@ -161,8 +160,6 @@ fn check_exceptive_gray(attempt_word: &String, feedback: &String, current_i: usi
     }
     return false;
 }
-
-type CharScores = HashMap<char, f64>;
 
 // 単語の削減量をヒューリスティックに計算
 // 「文字スコアの合計、ただし同じ文字は一回しか計上しない」
